@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DeepShield AI</title>
+  <style>
+    :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color: #172033; background: #f6f8fb; }
+    body { margin: 0; }
+    header { background: linear-gradient(135deg, #071a52, #173b9f); color: white; padding: 34px 16px; }
+    main { max-width: 1160px; margin: 0 auto; padding: 20px 16px 48px; }
+    h1 { margin: 0 0 8px; font-size: clamp(2rem, 4vw, 3.4rem); }
+    h2, h3 { margin-top: 0; }
+    .subtitle { margin: 0; max-width: 850px; opacity: .9; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 16px; }
+    .card { background: white; border: 1px solid #e6ebf4; border-radius: 18px; padding: 18px; box-shadow: 0 10px 30px rgba(20, 33, 61, .08); }
+    label { display: block; font-weight: 650; margin: 12px 0 6px; }
+    input, textarea, button { width: 100%; box-sizing: border-box; border-radius: 12px; border: 1px solid #d8deea; padding: 12px; font: inherit; }
+    textarea { min-height: 88px; resize: vertical; }
+    button { cursor: pointer; border: 0; color: white; background: #1f5eff; margin-top: 14px; font-weight: 700; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .hint, .small { font-size: .9rem; color: #68758c; }
+    .score { font-size: 4rem; font-weight: 850; line-height: 1; }
+    .label, .grade { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #eef2ff; font-weight: 750; margin: 8px 8px 8px 0; }
+    .grade { background: #ecfdf3; }
+    pre { white-space: pre-wrap; overflow-x: auto; background: #0f172a; color: #e5e7eb; padding: 16px; border-radius: 14px; }
+    .claims { display: grid; gap: 10px; }
+    .claim { border: 1px solid #e7ebf3; border-radius: 14px; padding: 12px; }
+    .error { color: #b42318; background: #ffebe9; border-radius: 12px; padding: 10px; }
+    .notice { background: #fff8e6; border: 1px solid #f2d078; color: #553b00; padding: 12px; border-radius: 14px; }
+    a { color: #1f5eff; }
+    .source-list { columns: 2; }
+    @media (max-width: 760px) { .source-list { columns: 1; } }
+  </style>
+</head>
+<body>
+<header>
+  <main style="padding:0 16px;">
+    <h1>DeepShield AI</h1>
+    <p class="subtitle">Evidence-grade news credibility checks for Indian and Asian-region URLs, claims, screenshots, images, video, and audio. Compares multiple sources such as TOI, BBC, NDTV, The Hindu, Indian Express, Reuters/AP, fact-check databases, GDELT and RSS feeds.</p>
+  </main>
+</header>
+<main>
+  <div class="notice">
+    This tool creates an auditable AI-assisted evidence report with citations, hashes and source comparison. It is not a court order or final legal proof; legal use needs original evidence preservation and human/legal review.
+  </div>
+
+  <div class="grid" style="margin-top:16px;">
+    <section class="card">
+      <h2>Analyze news URL</h2>
+      <label for="url">News article / social post URL</label>
+      <input id="url" placeholder="https://..." />
+      <label for="urlNote">Optional context</label>
+      <textarea id="urlNote" placeholder="Example: Viral claim says this happened today in Mumbai..."></textarea>
+      <button id="urlBtn">Check URL</button>
+      <p class="hint">Works best with public URLs. Login-only social posts may not be readable.</p>
+    </section>
+
+    <section class="card">
+      <h2>Verify written claim</h2>
+      <label for="claimText">Claim to verify</label>
+      <textarea id="claimText" placeholder="Example: A viral post claims that ..."></textarea>
+      <label for="claimNote">Optional context</label>
+      <textarea id="claimNote" placeholder="Where did you see it? WhatsApp, Instagram, newspaper, etc."></textarea>
+      <button id="claimBtn">Compare sources</button>
+      <p class="hint">Useful when you only have a headline, WhatsApp text, or a caption.</p>
+    </section>
+
+    <section class="card">
+      <h2>Analyze media</h2>
+      <label for="media">Image, video, audio, PDF, or text file</label>
+      <input id="media" type="file" accept="image/*,video/*,audio/*,application/pdf,text/plain" />
+      <label for="mediaNote">Optional context</label>
+      <textarea id="mediaNote" placeholder="Example: This WhatsApp video claims to show a recent incident in India..."></textarea>
+      <button id="mediaBtn">Check media</button>
+      <p class="hint">The server extracts metadata and hashes before Gemini analysis.</p>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:16px;">
+    <h2>Result</h2>
+    <div id="status" class="small">No analysis yet.</div>
+    <div id="result"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function escapeHtml(text) {
+  return String(text ?? '').replace(/[&<>'"]/g, (c) => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;'}[c]));
+}
+
+function shortUrl(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url || ''; }
+}
+
+function renderResult(payload) {
+  const r = payload.result || payload;
+  const claims = Array.isArray(r.key_claims) ? r.key_claims : [];
+  const citations = Array.isArray(r.citations) ? r.citations : [];
+  const actions = Array.isArray(r.recommended_user_action) ? r.recommended_user_action : [];
+  const comparison = r.cross_source_comparison || {};
+  const bundle = r.evidence_bundle || {};
+  const discoveries = Array.isArray(r.source_discovery) ? r.source_discovery : [];
+  const foundSources = discoveries.flatMap(d => d.results || []).slice(0, 20);
+  const reportLink = bundle.report_id ? `/api/evidence/${encodeURIComponent(bundle.report_id)}` : null;
+
+  $('result').innerHTML = `
+    <div class="score">${escapeHtml(r.overall_score ?? '—')}</div>
+    <div class="label">${escapeHtml(r.label ?? 'unavailable')}</div>
+    <div class="grade">Evidence Grade: ${escapeHtml(r.legal_evidence_grade ?? '—')}</div>
+    <p>${escapeHtml(r.summary ?? 'No summary returned.')}</p>
+    <div class="notice">${escapeHtml(r.legal_evidence_notice || bundle.legal_notice || 'AI-assisted evidence report, not final legal proof.')}</div>
+
+    ${reportLink ? `<p><strong>Evidence bundle:</strong> <a href="${reportLink}" target="_blank" rel="noreferrer">Download JSON report</a><br><span class="small">Report ID: ${escapeHtml(bundle.report_id)} · SHA-256: ${escapeHtml(bundle.bundle_sha256)}</span></p>` : ''}
+
+    <h3>Cross-source comparison</h3>
+    <pre>${escapeHtml(JSON.stringify(comparison, null, 2))}</pre>
+
+    <h3>Key claims</h3>
+    <div class="claims">
+      ${claims.map(c => `
+        <div class="claim">
+          <strong>${escapeHtml(c.verdict)} · ${escapeHtml(c.confidence)}%</strong>
+          <p>${escapeHtml(c.claim)}</p>
+          <div class="small">Independent sources: ${escapeHtml(c.independent_source_count ?? '—')} · Total sources: ${escapeHtml(c.source_count ?? '—')}</div>
+          <div class="small">Evidence: ${(c.evidence || []).map(escapeHtml).join('; ') || '—'}</div>
+          <div class="small">Counter: ${(c.counter_evidence || []).map(escapeHtml).join('; ') || '—'}</div>
+        </div>`).join('') || '<p class="small">No claims extracted.</p>'}
+    </div>
+
+    <h3>Discovered source URLs</h3>
+    <ul class="source-list">${foundSources.map(s => `<li><a href="${escapeHtml(s.url)}" target="_blank" rel="noreferrer">${escapeHtml(s.title || shortUrl(s.url))}</a><br><span class="small">${escapeHtml(s.provider)} · ${escapeHtml(s.source || s.domain || '')}</span></li>`).join('') || '<li>No external discovery results returned. Configure Google CSE / Fact Check / NewsAPI for stronger checks.</li>'}</ul>
+
+    <h3>Regional context</h3>
+    <pre>${escapeHtml(JSON.stringify(r.regional_context || {}, null, 2))}</pre>
+    <h3>Media/source assessment</h3>
+    <pre>${escapeHtml(JSON.stringify({source_assessment: r.source_assessment, media_forensics: r.media_forensics, timeline_check: r.timeline_check, audit_notes: r.audit_notes}, null, 2))}</pre>
+    <h3>Recommended action</h3>
+    <ul>${actions.map(a => `<li>${escapeHtml(a)}</li>`).join('') || '<li>No action returned.</li>'}</ul>
+    <h3>Citations</h3>
+    <ul>${citations.map(s => `<li><a href="${escapeHtml(s.url)}" target="_blank" rel="noreferrer">${escapeHtml(s.title || s.url)}</a> — ${escapeHtml(s.supports || '')}</li>`).join('') || '<li>No citations returned.</li>'}</ul>
+    <details><summary>Raw JSON</summary><pre>${escapeHtml(JSON.stringify(r, null, 2))}</pre></details>
+  `;
+}
+
+async function postJson(url, body) {
+  const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `Request failed: ${res.status}`);
+  return data;
+}
+
+async function postForm(url, form) {
+  const res = await fetch(url, {method: 'POST', body: form});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `Request failed: ${res.status}`);
+  return data;
+}
+
+$('urlBtn').addEventListener('click', async () => {
+  $('urlBtn').disabled = true;
+  $('status').textContent = 'Analyzing URL, discovering multiple sources, and building evidence report...';
+  $('result').innerHTML = '';
+  try {
+    const data = await postJson('/api/analyze-url', {url: $('url').value.trim(), user_note: $('urlNote').value.trim() || null});
+    $('status').textContent = 'Analysis complete.';
+    renderResult(data);
+  } catch (err) {
+    $('status').innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`;
+  } finally {
+    $('urlBtn').disabled = false;
+  }
+});
+
+$('claimBtn').addEventListener('click', async () => {
+  $('claimBtn').disabled = true;
+  $('status').textContent = 'Comparing claim against multiple sources and fact-check databases...';
+  $('result').innerHTML = '';
+  try {
+    const data = await postJson('/api/verify-claim', {claim_text: $('claimText').value.trim(), user_note: $('claimNote').value.trim() || null});
+    $('status').textContent = 'Analysis complete.';
+    renderResult(data);
+  } catch (err) {
+    $('status').innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`;
+  } finally {
+    $('claimBtn').disabled = false;
+  }
+});
+
+$('mediaBtn').addEventListener('click', async () => {
+  const file = $('media').files[0];
+  if (!file) return $('status').innerHTML = '<div class="error">Choose a media file first.</div>';
+  $('mediaBtn').disabled = true;
+  $('status').textContent = 'Uploading media, extracting metadata, discovering sources, and building evidence report...';
+  $('result').innerHTML = '';
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('user_note', $('mediaNote').value.trim());
+    const data = await postForm('/api/analyze-media', form);
+    $('status').textContent = 'Analysis complete.';
+    renderResult(data);
+  } catch (err) {
+    $('status').innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`;
+  } finally {
+    $('mediaBtn').disabled = false;
+  }
+});
+</script>
+</body>
+</html>

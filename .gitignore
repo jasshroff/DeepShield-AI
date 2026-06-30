@@ -1,0 +1,48 @@
+# ── Secrets & Environment ──────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+*.whl
+
+# pyenv
+.python-version
+
+# ── Logs & Reports ─────────────────────────────────────────────────
+*.log
+evidence_reports/
+
+# ── OS Files ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / Editor ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Node (if frontend grows) ───────────────────────────────────────
+node_modules/
+npm-debug.log*
