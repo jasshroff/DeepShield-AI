@@ -210,6 +210,32 @@ def search_factcheck_api(query: str, limit: int = 10) -> list[dict[str, Any]]:
     return results
 
 
+def search_duckduckgo(query: str, limit: int = 10) -> list[dict[str, Any]]:
+    """Free general web search, no API key required. Replaces Gemini's paid google_search tool."""
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        return []
+
+    results: list[dict[str, Any]] = []
+    try:
+        with DDGS() as ddgs:
+            for item in ddgs.text(query, max_results=limit):
+                url = item.get("href") or item.get("url")
+                results.append({
+                    "provider": "duckduckgo",
+                    "source": _domain(url or ""),
+                    "title": item.get("title"),
+                    "url": url,
+                    "snippet": item.get("body"),
+                    "published_at": None,
+                    "retrieved_at": utc_now(),
+                })
+    except Exception:
+        return results
+    return results
+
+
 def search_rss_feeds(query: str, limit_per_feed: int = 4) -> list[dict[str, Any]]:
     """Best-effort RSS search by title/summary keyword overlap."""
     terms = {t.lower() for t in re.findall(r"[A-Za-z0-9]{4,}", query)}
@@ -253,6 +279,7 @@ def discover_sources_for_claim(claim: str, max_results: int = 40) -> dict[str, A
     for fn, kwargs in [
         (search_factcheck_api, {"limit": 10}),
         (search_google_cse, {"site_domains": target_domains, "limit": 10}),
+        (search_duckduckgo, {"limit": 10}),
         (search_newsapi, {"limit": 15}),
         (search_gdelt, {"limit": 25}),
         (search_rss_feeds, {"limit_per_feed": 3}),
@@ -265,7 +292,9 @@ def discover_sources_for_claim(claim: str, max_results: int = 40) -> dict[str, A
     unique = _dedupe(results)
     # Prefer fact-check results and trusted domains before general GDELT/NewsAPI results.
     def rank(item: dict[str, Any]) -> tuple[int, int]:
-        provider_rank = {"google_factcheck": 0, "google_cse": 1, "rss": 2, "newsapi": 3, "gdelt": 4}.get(item.get("provider"), 9)
+        provider_rank = {
+            "google_factcheck": 0, "google_cse": 1, "duckduckgo": 2, "rss": 3, "newsapi": 4, "gdelt": 5,
+        }.get(item.get("provider"), 9)
         trusted = 0 if any(item.get("domain", "").endswith(d) for d in target_domains) else 1
         return (provider_rank, trusted)
 
@@ -279,6 +308,7 @@ def discover_sources_for_claim(claim: str, max_results: int = 40) -> dict[str, A
         "configured_providers": {
             "google_cse": bool(settings.GOOGLE_CSE_API_KEY and settings.GOOGLE_CSE_ID),
             "google_factcheck": bool(settings.FACT_CHECK_API_KEY),
+            "duckduckgo": True,
             "newsapi": bool(settings.NEWSAPI_KEY),
             "gdelt": True,
             "rss": True,

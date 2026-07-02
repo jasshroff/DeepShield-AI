@@ -13,6 +13,8 @@ Important rules:
   and independent fact-checkers.
 - Compare multiple independent sources. Do not treat one article as proof.
 - Distinguish direct evidence, corroborating reporting, copied syndication, opinion, and social-media repetition.
+- You do not have live web/search access. Only cite a URL if it was explicitly given to you in the extracted
+  article text or the machine-collected source discovery results below. Never invent, guess, or reconstruct a URL.
 - Return JSON only. No markdown.
 """
 
@@ -91,21 +93,28 @@ E = no reliable corroboration or strong evidence of false/manipulated content.
 """
 
 
-def build_url_prompt(url: str, user_note: str | None = None) -> str:
+def build_url_prompt(url: str, article_text: str | None = None, user_note: str | None = None) -> str:
     note = f"\nUser note/context: {user_note}" if user_note else ""
+    if article_text:
+        article_block = f"\nArticle text extracted locally by the server (may be partial):\n{article_text}\n"
+    else:
+        article_block = (
+            "\nNote: automatic page text extraction failed or returned no readable content. "
+            "Reason about the URL and any context given; do not invent article content.\n"
+        )
     return f"""
 Analyze this news URL for credibility in the Indian and Asian regional context:
 {url}
 {note}
+{article_block}
 
 Tasks:
-1. Use URL context to read the article/page.
-2. Use Google Search grounding to find corroborating and contradicting sources.
-3. Extract the main factual claims.
-4. Check whether the event is current, old, reposted, miscaptioned, or out of context.
-5. Estimate the credibility score using the rubric.
-6. Include citations from accessible sources.
-7. Do not call the result legal proof; assign a legal_evidence_grade based on evidence quality.
+1. Read the extracted article text above to understand the article/page.
+2. Extract the main factual claims from that text.
+3. Check whether the event is current, old, reposted, miscaptioned, or out of context, based only on the supplied text.
+4. Estimate the credibility score using the rubric. A separate corroboration step will supply independently
+   discovered sources next; here, focus on what the article itself claims and how it is written.
+5. Do not call the result legal proof; assign a legal_evidence_grade based on evidence quality.
 
 {JSON_SCHEMA_INSTRUCTIONS}
 """
@@ -124,10 +133,12 @@ Tasks:
 1. Describe what is visible/audible and extract factual claims.
 2. Detect language, region, place names, logos, captions, watermarks, and timestamps.
 3. Look for signs of editing, AI-generation, deepfake risk, misleading crops, dubbed audio, reused/old content, or mismatched captions.
-4. Use Google Search grounding to search for corroboration/contradictions around detected names, places, dates, slogans, and incident details.
-5. Give reverse-search query suggestions for Google Images/YouTube/social platforms.
-6. Estimate the credibility score using the rubric.
-7. Do not call the result legal proof; assign a legal_evidence_grade based on evidence quality.
+   Note: a separate local, dedicated deepfake-detection model also scores this file; your job here is qualitative
+   visual/audio reasoning, not the final probability.
+4. Give reverse-search query suggestions for Google Images/YouTube/social platforms that a human or a later
+   automated step could run (a separate corroboration step will supply independently discovered sources next).
+5. Estimate the credibility score using the rubric.
+6. Do not call the result legal proof; assign a legal_evidence_grade based on evidence quality.
 
 {JSON_SCHEMA_INSTRUCTIONS}
 """
@@ -148,7 +159,8 @@ Tasks:
 2. Treat Times of India, BBC, NDTV, The Hindu, Indian Express, Hindustan Times, Reuters, AP, ANI/PTI and regional Asian outlets as corroborating only when they independently report the same factual detail.
 3. Identify copied/syndicated articles as lower independence than separate original reporting.
 4. Prefer primary records when available: government, police, court, hospital, exchange filing, company release, regulator, election commission, disaster agency.
-5. Use URL Context and Google Search grounding to inspect the most relevant source URLs from the discovery results.
+5. Base every citation strictly on the titles/URLs/snippets already present in the source discovery results above.
+   Do not fetch, browse, or invent anything beyond what was supplied.
 6. Produce the final JSON report with legal_evidence_grade and audit_notes.
 7. Be explicit about limitations and do not state court-level proof.
 

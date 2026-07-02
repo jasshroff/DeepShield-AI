@@ -6,3 +6,10 @@ google-genai>=2.0.0
 Pillow==11.3.0
 requests==2.32.5
 feedparser==6.0.11
+
+# Free local deepfake/AI-text detection + free web search/fetch, replacing Gemini's paid
+# google_search / url_context grounding tools. torch is CPU-only; install it separately, see README.
+transformers>=4.44
+opencv-python-headless>=4.9
+ddgs>=9.0
+trafilatura>=2.0

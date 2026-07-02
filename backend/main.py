@@ -58,6 +58,11 @@ def health() -> dict:
         "version": "0.2.0",
         "providers": {
             "gemini": bool(settings.GEMINI_API_KEY),
+            "gemini_search_grounding_paid_tool": settings.ENABLE_GEMINI_SEARCH_GROUNDING,
+            "gemini_url_context_paid_tool": settings.ENABLE_GEMINI_URL_CONTEXT,
+            "local_deepfake_image_video_classifier": True,
+            "local_ai_text_classifier": True,
+            "duckduckgo": True,
             "google_cse": bool(settings.GOOGLE_CSE_API_KEY and settings.GOOGLE_CSE_ID),
             "google_factcheck": bool(settings.FACT_CHECK_API_KEY),
             "newsapi": bool(settings.NEWSAPI_KEY),

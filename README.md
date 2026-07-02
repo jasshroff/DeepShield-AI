@@ -1,6 +1,22 @@
 # DeepShield AI
 
-A local MVP for checking news credibility in India and Asia using Gemini URL Context, Google Search grounding, Gemini media understanding, and multi-source corroboration.
+A local MVP for checking news credibility in India and Asia using Gemini media understanding, dedicated
+local deepfake/AI-text classifiers, free web search/corroboration, and multi-source comparison.
+
+> **Runs fully free by default.** Gemini's `google_search` / `url_context` grounding tools are billed beyond a
+> small free quota, so they are **off by default** (`ENABLE_GEMINI_SEARCH_GROUNDING=False`,
+> `ENABLE_GEMINI_URL_CONTEXT=False` in `.env`). In their place:
+> - **Image/video deepfake detection** runs on a local, free, offline-capable Hugging Face model
+>   ([`dima806/deepfake_vs_real_image_detection`](https://huggingface.co/dima806/deepfake_vs_real_image_detection)),
+>   not an LLM guess — this is also a better fit for a research project since it's a purpose-built forensic
+>   classifier, not a general-purpose chatbot reasoning about pixels.
+> - **AI-generated text detection** runs on a local, free model
+>   ([`Hello-SimpleAI/chatgpt-detector-roberta`](https://huggingface.co/Hello-SimpleAI/chatgpt-detector-roberta)).
+> - **Web corroboration/search** uses free DuckDuckGo search plus the existing free GDELT/RSS/Fact Check
+>   sources, instead of Gemini's paid search grounding.
+> - Gemini itself is still used (for multimodal understanding and report writing) on its normal free-tier
+>   quota — only the paid *tools* were removed. If you later enable Gemini billing, you can flip the two
+>   `ENABLE_GEMINI_*` flags back to `True` to restore Gemini's own grounding.
 
 It can analyze:
 
@@ -11,10 +27,18 @@ It can analyze:
 
 > Important: this creates an **AI-assisted evidence-grade verification report**, not final legal proof. Courts, police, lawyers, newsroom editors, and qualified human experts decide legal proof. The tool preserves evidence metadata, hashes, source URLs, citations, and reasoning to support human review.
 
+## What is new in v0.3
+
+1. **Local, free forensic classifiers replace paid Gemini grounding**
+   - Image/video deepfake risk: local ViT classifier, runs offline after first download
+   - AI-generated text risk: local RoBERTa classifier for claims and fetched article text
+   - Both attach a `local_forensic_model` section to every result, with raw model scores
+
 ## What is new in v0.2
 
 1. **Multi-source comparison**
-   - Google URL Context + Google Search grounding
+   - Local article text extraction (no Gemini URL Context tool needed)
+   - Free DuckDuckGo web search
    - Google Programmable Search / Custom Search JSON API when configured
    - Google Fact Check Tools API when configured
    - NewsAPI when configured
@@ -62,6 +86,11 @@ cd deepshield-ai
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# torch (needed by the local deepfake/AI-text classifiers) is installed separately as a
+# CPU-only build to avoid pulling multi-GB CUDA packages you don't need for this project:
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+
 cp .env.example .env
 ```
 
@@ -80,7 +109,12 @@ FACT_CHECK_API_KEY=your_google_fact_check_tools_api_key
 NEWSAPI_KEY=your_newsapi_key
 ```
 
-GDELT and RSS checks work without extra keys.
+GDELT, RSS, and DuckDuckGo checks work without extra keys.
+
+The first time you analyze an image, video, or claim/URL, the local classifiers will download their model
+weights from Hugging Face automatically (roughly 300–500 MB total) and cache them under
+`~/.cache/huggingface`. That first request will be slow (tens of seconds); every request after that is fast
+since the models stay loaded in memory for the life of the server process.
 
 Run:
 
@@ -161,4 +195,19 @@ The tool can support legal/newsroom review by keeping a structured audit trail. 
 
 ## Live API note
 
-Gemini Live API is for real-time camera/microphone streaming over WebSockets. For uploaded media files, the standard media analysis flow is simpler, cheaper, and easier to audit. Add a server-side WebSocket proxy only if you want live fact-checking from browser camera/mic; do not expose your Gemini API key in frontend JavaScript.
+Gemini Live API is for real-time camera/microphone streaming over WebSockets and is **not used anywhere in
+this codebase** — `GEMINI_LIVE_MODEL` and `/api/live-info` are placeholders for a future feature, not an
+active integration. All current analysis (`/api/analyze-url`, `/api/verify-claim`, `/api/analyze-media`) uses
+one-shot Gemini calls plus the local classifiers described above, not the Live API. If you build a WebSocket
+proxy for browser camera/mic later, keep the API key server-side and never expose it in frontend JavaScript.
+
+## Local forensic classifier notes
+
+- `dima806/deepfake_vs_real_image_detection` and `Hello-SimpleAI/chatgpt-detector-roberta` are general-purpose
+  research models, not perfect detectors — treat their scores as one signal among several (alongside the
+  Gemini reasoning and multi-source corroboration), not a final verdict. This mirrors how the rest of the
+  report already treats `legal_evidence_grade` as evidence-grade, not proof.
+- Both run on CPU by default; if you have a CUDA GPU available, install the matching `torch` CUDA build
+  instead of the CPU wheel for faster inference, especially for video (which classifies multiple frames).
+- Swap either model via `FORENSIC_IMAGE_MODEL` / `FORENSIC_TEXT_MODEL` in `.env` if you find a better-performing
+  one for your dataset (e.g. a model fine-tuned specifically on FaceForensics++/DFDC for your region's content).
