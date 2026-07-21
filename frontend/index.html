@@ -30,6 +30,10 @@
     .notice { background: #fff8e6; border: 1px solid #f2d078; color: #553b00; padding: 12px; border-radius: 14px; }
     a { color: #1f5eff; }
     .source-list { columns: 2; }
+    .detail-list { list-style: none; padding: 0; display: grid; gap: 8px; margin-bottom: 16px; margin-top: 0; }
+    .detail-list li { padding: 12px 16px; background: #fff; border: 1px solid #e7ebf3; border-radius: 12px; font-size: 0.95rem; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+    .detail-key { font-weight: 650; display: block; margin-bottom: 4px; color: #172033; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .detail-val { color: #4a5568; display: block; }
     @media (max-width: 760px) { .source-list { columns: 1; } }
   </style>
 </head>
@@ -116,7 +120,13 @@ function renderResult(payload) {
     ${reportLink ? `<p><strong>Evidence bundle:</strong> <a href="${reportLink}" target="_blank" rel="noreferrer">Download JSON report</a><br><span class="small">Report ID: ${escapeHtml(bundle.report_id)} · SHA-256: ${escapeHtml(bundle.bundle_sha256)}</span></p>` : ''}
 
     <h3>Cross-source comparison</h3>
-    <pre>${escapeHtml(JSON.stringify(comparison, null, 2))}</pre>
+    <ul class="detail-list">
+      <li><span class="detail-key">Consensus Level</span><span class="detail-val">${escapeHtml(comparison.consensus_level || 'Unknown')}</span></li>
+      <li><span class="detail-key">Supporting Sources</span><span class="detail-val">${(comparison.sources_supporting || []).map(escapeHtml).join(', ') || 'None'}</span></li>
+      <li><span class="detail-key">Contradicting Sources</span><span class="detail-val">${(comparison.sources_contradicting || []).map(escapeHtml).join(', ') || 'None'}</span></li>
+      <li><span class="detail-key">Primary Sources Found</span><span class="detail-val">${(comparison.primary_sources_found || []).map(escapeHtml).join(', ') || 'None'}</span></li>
+      <li><span class="detail-key">Fact Checks</span><span class="detail-val">${(comparison.fact_check_sources_found || []).map(escapeHtml).join(', ') || 'None'}</span></li>
+    </ul>
 
     <h3>Key claims</h3>
     <div class="claims">
@@ -134,9 +144,30 @@ function renderResult(payload) {
     <ul class="source-list">${foundSources.map(s => `<li><a href="${escapeHtml(s.url)}" target="_blank" rel="noreferrer">${escapeHtml(s.title || shortUrl(s.url))}</a><br><span class="small">${escapeHtml(s.provider)} · ${escapeHtml(s.source || s.domain || '')}</span></li>`).join('') || '<li>No external discovery results returned. Configure Google CSE / Fact Check / NewsAPI for stronger checks.</li>'}</ul>
 
     <h3>Regional context</h3>
-    <pre>${escapeHtml(JSON.stringify(r.regional_context || {}, null, 2))}</pre>
+    <ul class="detail-list">
+      <li><span class="detail-key">Region Detected</span><span class="detail-val">${escapeHtml(r.regional_context?.region_detected || 'Unknown')}</span></li>
+      <li><span class="detail-key">Language Detected</span><span class="detail-val">${escapeHtml(r.regional_context?.language_detected || 'Unknown')}</span></li>
+      <li><span class="detail-key">Sensitivity Notes</span><span class="detail-val">${(r.regional_context?.local_sensitivity_notes || []).map(escapeHtml).join('<br><br>') || 'None'}</span></li>
+    </ul>
+
     <h3>Media/source assessment</h3>
-    <pre>${escapeHtml(JSON.stringify({source_assessment: r.source_assessment, media_forensics: r.media_forensics, timeline_check: r.timeline_check, audit_notes: r.audit_notes}, null, 2))}</pre>
+    <div class="grid">
+      <ul class="detail-list">
+        <li><span class="detail-key">Publisher / Origin</span><span class="detail-val">${escapeHtml(r.source_assessment?.publisher_or_origin || 'Unknown')}</span></li>
+        <li><span class="detail-key">Source Type</span><span class="detail-val">${escapeHtml(r.source_assessment?.source_type || 'Unknown')}</span></li>
+        <li><span class="detail-key">Reliability Notes</span><span class="detail-val">${(r.source_assessment?.reliability_notes || []).map(escapeHtml).join('<br><br>') || 'None'}</span></li>
+      </ul>
+      <ul class="detail-list">
+        <li><span class="detail-key">AI/Deepfake Risk</span><span class="detail-val">${escapeHtml(r.media_forensics?.deepfake_or_ai_generation_risk || 'Unknown')}</span></li>
+        <li><span class="detail-key">Claimed Event Date</span><span class="detail-val">${escapeHtml(r.timeline_check?.claimed_event_date || 'Unknown')}</span></li>
+        <li><span class="detail-key">Is Old Content Reused?</span><span class="detail-val">${escapeHtml(r.timeline_check?.is_old_content_reused || 'Unknown')}</span></li>
+      </ul>
+    </div>
+    <ul class="detail-list" style="margin-top: 8px;">
+      <li><span class="detail-key">Audit Limitations</span><span class="detail-val">${(r.audit_notes?.limitations || []).map(escapeHtml).join('<br><br>') || 'None'}</span></li>
+      <li><span class="detail-key">Legal Grade Requirements</span><span class="detail-val">${(r.audit_notes?.what_would_make_this_legal_grade || []).map(escapeHtml).join('<br><br>') || 'None'}</span></li>
+    </ul>
+
     <h3>Recommended action</h3>
     <ul>${actions.map(a => `<li>${escapeHtml(a)}</li>`).join('') || '<li>No action returned.</li>'}</ul>
     <h3>Citations</h3>
